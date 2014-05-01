@@ -12,6 +12,10 @@ function indent() {
 
 unset GIT_DIR
 
+combo=$(mktemp -t combined-compile.XXXXXX)
+echo "# This script is a combination of compile scripts" > $combo
+last_pack_dir=""
+
 for BUILDPACK in $(cat $1/.buildpacks); do
   dir=$(mktemp -t buildpackXXXXX)
   rm -rf $dir
@@ -32,7 +36,6 @@ for BUILDPACK in $(cat $1/.buildpacks); do
     else
       git clone $url $dir >/dev/null 2>&1
     fi
-    cd $dir
 
     if [ "$branch" != "" ]; then
       git checkout $branch >/dev/null 2>&1
@@ -45,18 +48,23 @@ for BUILDPACK in $(cat $1/.buildpacks); do
 
     if [ $? == 0 ]; then
       echo "=====> Detected Framework: $framework"
-      $dir/bin/compile $1 $2 $3
+      cat $dir/bin/compile >> $combo
 
-      if [ $? != 0 ]; then
-        exit 1
-      fi
-
-      if [ -x $dir/bin/release ]; then
-        $dir/bin/release $1 > $1/last_pack_release.out
-      fi
+      last_pack_dir=$dir
     fi
   fi
 done
+
+chmod +x $combo
+$combo $1 $2 $3
+
+if [ $? != 0 ]; then
+  exit 1
+fi
+
+if [ -x $last_pack_dir/bin/release ]; then
+  $last_pack_dir/bin/release $1 > $1/last_pack_release.out
+fi
 
 if [ -e $1/last_pack_release.out ]; then
   echo "Using release configuration from last framework $framework:" | indent
